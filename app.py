@@ -1,8 +1,10 @@
-import streamlit as st
-import data_processing, model, evaluate
+from data_processing import get_stock_data, preprocess_data, create_features, scale_data, create_sequences, train_test_split_ts
+from model import build_lstm_model, train_model
+from evaluate import evaluate_model, predict_future
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
+import streamlit as st
 
 def main():
     st.title("Stock Price Prediction")
@@ -15,29 +17,29 @@ def main():
     if st.button("Predict"):
         with st.spinner("Fetching and processing data..."):
             # Use get_stock_data from data_processing.py
-            df = data_processing.get_stock_data(stock_symbol)  # Pass the symbol
+            df = get_stock_data(stock_symbol)  # Pass the symbol
             if df is None:
                 st.error(f"Could not retrieve data for {stock_symbol}. Please check the symbol and file.")
                 return
 
-            df = data_processing.preprocess_data(df)
-            df = data_processing.create_features(df, lags=seq_length)
-            scaled_df, scaler = data_processing.scale_data(df)
+            df = preprocess_data(df)
+            df = create_features(df, lags=seq_length)
+            scaled_df, scaler = scale_data(df)
 
             # Get the index of the 'Close' column AFTER scaling
             target_column_name = 'Close'
             target_column_index = scaled_df.columns.get_loc(target_column_name)
 
-            X, y = data_processing.create_sequences(scaled_df.values, seq_length, target_column_index)
-            X_train, X_test, y_train, y_test = data_processing.train_test_split_ts(X, y)
+            X, y = create_sequences(scaled_df.values, seq_length, target_column_index)
+            X_train, X_test, y_train, y_test = train_test_split_ts(X, y)
 
         with st.spinner("Building and training model..."):
-            X_train, X_val, y_train, y_val = data_processing.train_test_split_ts(X_train, y_train, test_size=0.2)
-            lstm_model = model.build_lstm_model(input_shape=(X_train.shape[1], X_train.shape[2]))
-            trained_model, history = model.train_model(lstm_model, X_train, y_train, X_val, y_val)
+            X_train, X_val, y_train, y_val = train_test_split_ts(X_train, y_train, test_size=0.2)
+            lstm_model = build_lstm_model(input_shape=(X_train.shape[1], X_train.shape[2]))
+            trained_model, history = train_model(lstm_model, X_train, y_train, X_val, y_val)
 
         with st.spinner("Evaluating model..."):
-            rmse, mae, r2, y_test_inv, y_pred_inv = evaluate.evaluate_model(trained_model, X_test, y_test, scaler)
+            rmse, mae, r2, y_test_inv, y_pred_inv = evaluate_model(trained_model, X_test, y_test, scaler)
             st.write(f"Root Mean Squared Error (RMSE): {rmse:.2f}")
             st.write(f"Mean Absolute Error (MAE): {mae:.2f}")
             st.write(f"R-squared: {r2:.3f}")
@@ -60,15 +62,16 @@ def main():
         ax_pred.legend()
         st.pyplot(fig_pred)
 
-        with st.spinner("Predicting future prices..."):
+    with st.spinner("Predicting future prices..."):
             last_sequence = X_test[-1]
-            future_preds = evaluate.predict_future(trained_model, last_sequence, scaler, n_days)
+            future_preds = predict_future(trained_model, last_sequence, scaler, n_days)
             st.subheader(f"Predicted Prices for the Next {n_days} Days:")
+            # Create dates for the future predictions
             last_date = df.index[-1]
             future_dates = [last_date + datetime.timedelta(days=i) for i in range(1, n_days + 1)]
             future_df = pd.DataFrame({'Date': future_dates, 'Predicted Price': future_preds})
             future_df = future_df.set_index('Date')
-            st.dataframe(future_df)
+            st.dataframe(future_df) #Display as dataframe
 
             st.subheader("Future Price Predictions")
             fig_future, ax_future = plt.subplots()

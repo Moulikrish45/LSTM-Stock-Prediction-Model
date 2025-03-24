@@ -20,6 +20,7 @@ def evaluate_model(model, X_test, y_test, scaler):
 
     return rmse, mae, r2, y_test_inv, y_pred_inv
 
+# evaluate.py
 def predict_future(model, last_sequence, scaler, n_days):
     """
     Predicts future stock prices for n_days.
@@ -28,20 +29,20 @@ def predict_future(model, last_sequence, scaler, n_days):
     current_sequence = last_sequence.copy()
 
     for _ in range(n_days):
-        # Reshape the sequence to match the model's input shape
+        # Reshape the sequence
         current_sequence_reshaped = current_sequence.reshape(1, current_sequence.shape[0], current_sequence.shape[1])
-        # Make a prediction
+        # Predict
         next_day_pred = model.predict(current_sequence_reshaped)[0, 0]
 
-        # Inverse transform *only the predicted close price*
-        dummy_array = np.zeros((1, last_sequence.shape[1]))  # Create a dummy array of the right shape
-        dummy_array[0, 3] = next_day_pred  #  Put the prediction in the 'Close' column index
+        # Inverse transform *only* the predicted close price
+        dummy_array = np.zeros((1, current_sequence.shape[1]))
+        dummy_array[0, 3] = next_day_pred  # Assuming 'Close' is at index 3
         next_day_pred_inv = scaler.inverse_transform(dummy_array)[0, 3]
         future_predictions.append(next_day_pred_inv)
 
-        # Update the sequence:  Shift values and add the *scaled* prediction
-        new_row = current_sequence[-1, 1:].tolist()  # Drop the oldest value
-        new_row.append(next_day_pred) # Append the new *scaled* prediction
+        # Update the sequence:  Shift and add *scaled* prediction
+        new_row = current_sequence[-1, 1:].tolist()
+        new_row.append(next_day_pred)  # Append the *scaled* prediction
         current_sequence = np.vstack((current_sequence[1:], np.array(new_row).reshape(1, -1)))
 
     return future_predictions

@@ -3,13 +3,38 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import TimeSeriesSplit
 
+def get_stock_data(stock_symbol):
+    """
+    Retrieves stock data from a CSV file.
+    """
+    file_path = 'prices.csv'
+    df = pd.read_csv(file_path)
+    df = df[df['symbol'] == stock_symbol].copy()
+    
+    # Convert date to datetime and set as index
+    df['date'] = pd.to_datetime(df['date'])
+    df.set_index('date', inplace=True)
+    
+    # Rename columns to uppercase
+    df.rename(columns={
+        'open': 'Open',
+        'close': 'Close',
+        'low': 'Low',
+        'high': 'High',
+        'volume': 'Volume'
+    }, inplace=True)
+    
+    # Drop the symbol column as it's no longer needed
+    df.drop(columns=['symbol'], inplace=True)
+    
+    return df
+
 def preprocess_data(df, features_to_drop=()):
     """
     Cleans and preprocesses the stock data.
     """
     # Drop unnecessary columns
     df = df.drop(columns=features_to_drop, errors='ignore')
-
     # Handle missing values (forward fill, then backward fill)
     df = df.ffill().bfill()
 
@@ -90,52 +115,3 @@ def train_test_split_ts(X, y, test_size=0.2):
         X_train, X_test = X[train_index], X[test_index]
         y_train, y_test = y[train_index], y[test_index]
     return X_train, X_test, y_train, y_test
-
-if __name__ == '__main__':
-    # Load your dataset
-    file_path = 'prices.csv'
-    try:
-        df = pd.read_csv(file_path)
-        # Convert 'date' column to datetime and set as index
-        df['date'] = pd.to_datetime(df['date'])
-        df.set_index('date', inplace=True)
-        df.sort_index(inplace=True)
-
-        # Select a specific symbol if your dataset contains multiple symbols
-        target_symbol = 'AAPL' # Replace with the desired symbol if needed
-        if 'symbol' in df.columns:
-            df = df[df['symbol'] == target_symbol].copy()
-            df.drop(columns=['symbol'], inplace=True)
-
-        # Rename columns
-        df.rename(columns={'open': 'Open', 'close': 'Close', 'low': 'Low', 'high': 'High', 'volume': 'Volume'}, inplace=True)
-
-        # Preprocess
-        df_processed = preprocess_data(df)
-        # Create features
-        df_featured = create_features(df_processed)
-        # Scale
-        scaled_df, scaler = scale_data(df_featured)
-
-        # Define sequence length and target column index
-        sequence_length = 20  # Example value, adjust as needed
-        target_column_name = 'Close'
-        target_column_index = scaled_df.columns.get_loc(target_column_name)
-
-        # Create sequences
-        X, y = create_sequences(scaled_df.values, sequence_length, target_column_index)
-
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split_ts(X, y)
-
-        print("Shape of X_train:", X_train.shape)
-        print("Shape of X_test:", X_test.shape)
-        print("Shape of y_train:", y_train.shape)
-        print("Shape of y_test:", y_test.shape)
-
-    except FileNotFoundError:
-        print(f"Error: The file '{file_path}' was not found.")
-    except KeyError as e:
-        print(f"Error: The column '{e}' was not found in the CSV file.")
-    except Exception as e:
-        print(f"An error occurred: {e}")
