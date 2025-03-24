@@ -39,11 +39,4 @@ The provided image depicts the loss progression during model training. The blue 
 ### Conclusion:
 Our New York Stock Prediction project demonstrates the power of machine learning in forecasting stock prices. The developed model serves as a valuable tool for decision-making and market analysis, highlighting the importance of data-driven approaches in finance.
 
-## Contributors:
-- ![Naveen Kumar S](https://github.com/Naveentechie)
-- ![Mabasha R](https://github.com/coders2345)
-- ![Hari Hara Budra P](https://github.com/BudraHH)
-- Myself
-
-
 For more details, refer to the codebase and feel free to connect.
