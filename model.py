@@ -1,30 +1,83 @@
+# model.py
 import tensorflow as tf
-from keras import models, layers, callbacks
+from keras import models, layers, callbacks, regularizers, optimizers, losses
 
 def build_lstm_model(input_shape):
     """
-    Builds an LSTM model.
+    Builds an improved LSTM model specifically designed for returns prediction.
     """
-    model = models.Sequential()
-    model.add(layers.LSTM(units=50, return_sequences=True, input_shape=input_shape))
-    model.add(layers.Dropout(0.2))
-    model.add(layers.LSTM(units=50, return_sequences=True))  # Add another LSTM layer
-    model.add(layers.Dropout(0.2))
-    model.add(layers.LSTM(units=50)) # And another one
-    model.add(layers.Dropout(0.2))
-    model.add(layers.Dense(units=1))
-
-    model.compile(optimizer='adam', loss='mean_squared_error')
+    model = models.Sequential([
+        # Input layer with normalization
+        layers.LayerNormalization(input_shape=input_shape),
+        
+        # First LSTM layer
+        layers.LSTM(50, return_sequences=True,
+                   kernel_regularizer=regularizers.l2(0.001),
+                   recurrent_regularizer=regularizers.l2(0.001)),
+        layers.LayerNormalization(),
+        layers.Dropout(0.2),
+        
+        # Second LSTM layer
+        layers.LSTM(30, return_sequences=False,
+                   kernel_regularizer=regularizers.l2(0.001),
+                   recurrent_regularizer=regularizers.l2(0.001)),
+        layers.LayerNormalization(),
+        layers.Dropout(0.2),
+        
+        # Dense layers
+        layers.Dense(20, activation='relu',
+                    kernel_regularizer=regularizers.l2(0.001)),
+        layers.LayerNormalization(),
+        layers.Dropout(0.1),
+        
+        # Output layer (no activation for regression)
+        layers.Dense(1)
+    ])
+    
+    # Use Huber loss for robustness to outliers
+    optimizer = optimizers.Adam(learning_rate=0.001)
+    model.compile(optimizer=optimizer, 
+                loss=losses.Huber(delta=1.0))
+    
     return model
 
-def train_model(model, X_train, y_train, X_val, y_val, epochs=50, batch_size=32):
+def train_model(model, X_train, y_train, X_val, y_val, epochs=100, batch_size=32):
     """
-    Trains the LSTM model with early stopping and learning rate reduction.
+    Trains the LSTM model with improved training parameters.
     """
-    early_stopping = callbacks.EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True)
-    reduce_lr = callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=0.0001)
+    callbacks_list = [
+        # Early stopping with more patience
+        callbacks.EarlyStopping(
+            monitor='val_loss',
+            patience=20,
+            restore_best_weights=True,
+            mode='min'
+        ),
+        # Learning rate reduction
+        callbacks.ReduceLROnPlateau(
+            monitor='val_loss',
+            factor=0.2,
+            patience=10,
+            min_lr=1e-6,
+            mode='min',
+            verbose=1
+        ),
+        # Model checkpoint
+        callbacks.ModelCheckpoint(
+            'best_model.keras',
+            monitor='val_loss',
+            save_best_only=True,
+            mode='min'
+        )
+    ]
 
-    history = model.fit(X_train, y_train, epochs=epochs, batch_size=batch_size,
-                        validation_data=(X_val, y_val), callbacks=[early_stopping, reduce_lr],
-                        verbose=1)  # Add verbose for progress output
+    history = model.fit(
+        X_train, y_train,
+        epochs=epochs,
+        batch_size=batch_size,
+        validation_data=(X_val, y_val),
+        callbacks=callbacks_list,
+        verbose=1
+    )
+    
     return model, history
