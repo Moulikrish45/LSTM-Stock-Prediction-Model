@@ -1,11 +1,12 @@
 # data_processing.py
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, RobustScaler
 from sklearn.model_selection import TimeSeriesSplit
 import yfinance as yf
 from datetime import datetime, timedelta
 from typing import Tuple, Optional
+import warnings
 
 def get_stock_data(stock_symbol):
     """
@@ -75,149 +76,155 @@ def preprocess_data(df, features_to_drop=()):
 
     return df
 
-def scale_data(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], Optional[MinMaxScaler], Optional[MinMaxScaler]]:
+def scale_data(df: pd.DataFrame) -> Tuple[Optional[pd.DataFrame], Optional[RobustScaler]]:
     """
-    Scales the features using MinMaxScaler.
+    Scales the features using RobustScaler.
     """
     try:
-        # Create scalers
-        feature_scaler = MinMaxScaler(feature_range=(-1, 1))
-        return_scaler = MinMaxScaler(feature_range=(-1, 1))
+        # Ensure data types
+        for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+            df[col] = pd.to_numeric(df[col], errors='coerce').astype(np.float64)
         
-        # Convert Returns to numpy array
-        returns = df['Returns'].to_numpy().reshape(-1, 1)
+        # Calculate percentage returns (target)
+        df['Returns'] = df['Close'].pct_change(1) * 100  # Convert to percentage
+        df['Target'] = df['Returns'].shift(-1)  # Tomorrow's return is our target
         
-        # Scale returns
-        scaled_returns = return_scaler.fit_transform(returns)
+        # Calculate volatility for sample weights
+        df['Volatility'] = df['Returns'].rolling(window=5).std()
+        df['Sample_Weight'] = 1 / (df['Volatility'] + 1e-6)  # Avoid division by zero
         
-        # Scale other features
-        other_features = df.drop('Returns', axis=1)
-        other_features_array = other_features.to_numpy()
-        scaled_features = feature_scaler.fit_transform(other_features_array)
+        # Technical indicators (all in percentage terms)
+        df['Returns_3d'] = df['Close'].pct_change(3) * 100
+        df['Returns_5d'] = df['Close'].pct_change(5) * 100
         
-        # Combine scaled data back into a DataFrame
-        scaled_df = pd.DataFrame(
-            np.hstack([scaled_returns, scaled_features]),
-            columns=['Returns'] + list(other_features.columns),
-            dtype=np.float64
+        # Price momentum
+        df['RSI'] = calculate_rsi(df['Close'], window=14)
+        df['MACD'] = calculate_macd(df['Close'])
+        
+        # Volatility indicators
+        df['BB_Upper'], df['BB_Lower'] = calculate_bollinger_bands(df['Close'])
+        df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / df['Close'] * 100
+        
+        # Volume features
+        df['Volume_Change'] = df['Volume'].pct_change() * 100
+        df['Volume_MA5'] = df['Volume'].rolling(window=5).mean()
+        df['Volume_MA5_Change'] = df['Volume_MA5'].pct_change() * 100
+        
+        # Drop rows with NaN values from feature calculations
+        df = df.dropna()
+        
+        # Filter for normal market conditions
+        normal_market = (
+            (df['Volatility'] < df['Volatility'].quantile(0.8)) & 
+            (df['Volume'] > df['Volume'].quantile(0.2))
         )
+        df = df[normal_market]
         
-        return scaled_df, feature_scaler, return_scaler
+        # Initialize scaler
+        feature_scaler = RobustScaler()
+        
+        # Scale features
+        feature_cols = [col for col in df.columns if col not in ['Target', 'Sample_Weight']]
+        scaled_features = feature_scaler.fit_transform(df[feature_cols])
+        scaled_df = pd.DataFrame(scaled_features, columns=feature_cols, index=df.index)
+        
+        # Add back target and sample weights
+        scaled_df['Target'] = df['Target']
+        scaled_df['Sample_Weight'] = df['Sample_Weight']
+        
+        return scaled_df, feature_scaler
         
     except Exception as e:
         print(f"Error in scale_data: {str(e)}")
-        return None, None, None
+        return None, None
 
 def create_features(df: pd.DataFrame) -> Optional[pd.DataFrame]:
     """
-    Creates technical indicators and features from price data.
+    Creates features from price data with proper percentage returns and volatility scaling.
     """
     try:
-        # Create a copy to avoid modifying original data
-        df = df.copy()
-        
-        # Convert to float64 to ensure consistent calculations
+        # Ensure data types
         for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
-            df[col] = df[col].astype(np.float64)
+            df[col] = pd.to_numeric(df[col], errors='coerce').astype(np.float64)
         
-        # Basic price features
-        df['Returns'] = df['Close'].pct_change()
-        df['Range'] = (df['High'] - df['Low']) / df['Close']
-        df['Volume_1d_Change'] = df['Volume'].pct_change()
+        # Calculate percentage returns (target)
+        df['Returns'] = df['Close'].pct_change(1) * 100  # Convert to percentage
+        df['Target'] = df['Returns'].shift(-1)  # Tomorrow's return is our target
         
-        # Moving averages
-        ma5 = df['Close'].rolling(window=5).mean()
-        ma20 = df['Close'].rolling(window=20).mean()
-        ma50 = df['Close'].rolling(window=50).mean()
+        # Calculate volatility for sample weights
+        df['Volatility'] = df['Returns'].rolling(window=5).std()
+        df['Sample_Weight'] = 1 / (df['Volatility'] + 1e-6)  # Avoid division by zero
         
-        # Price distances from MAs (as percentages)
-        df['Price_MA5_Dist'] = ((df['Close'] - ma5) / df['Close']).astype(np.float64)
-        df['Price_MA20_Dist'] = ((df['Close'] - ma20) / df['Close']).astype(np.float64)
-        df['Price_MA50_Dist'] = ((df['Close'] - ma50) / df['Close']).astype(np.float64)
+        # Technical indicators (all in percentage terms)
+        df['Returns_3d'] = df['Close'].pct_change(3) * 100
+        df['Returns_5d'] = df['Close'].pct_change(5) * 100
         
-        # Volatility
-        df['Volatility'] = df['Returns'].rolling(window=20).std()
+        # Price momentum
+        df['RSI'] = calculate_rsi(df['Close'], window=14)
+        df['MACD'] = calculate_macd(df['Close'])
         
-        # RSI
-        delta = df['Close'].diff()
-        gain = delta.copy()
-        loss = delta.copy()
-        gain[gain < 0] = 0
-        loss[loss > 0] = 0
-        avg_gain = gain.rolling(window=14).mean()
-        avg_loss = -loss.rolling(window=14).mean()
-        rs = avg_gain / avg_loss
-        df['RSI'] = 100 - (100 / (1 + rs))
+        # Volatility indicators
+        df['BB_Upper'], df['BB_Lower'] = calculate_bollinger_bands(df['Close'])
+        df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / df['Close'] * 100
         
-        # MACD
-        exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-        exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-        df['MACD'] = (exp1 - exp2) / df['Close']
-        df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
-        df['MACD_Hist'] = df['MACD'] - df['Signal_Line']
+        # Volume features
+        df['Volume_Change'] = df['Volume'].pct_change() * 100
+        df['Volume_MA5'] = df['Volume'].rolling(window=5).mean()
+        df['Volume_MA5_Change'] = df['Volume_MA5'].pct_change() * 100
         
-        # Bollinger Bands
-        rolling_mean = df['Close'].rolling(window=20).mean()
-        rolling_std = df['Close'].rolling(window=20).std()
-        
-        # Calculate Bollinger Band distances as percentages
-        df['BB_Upper_Dist'] = ((rolling_mean + (2 * rolling_std) - df['Close']) / df['Close']).astype(np.float64)
-        df['BB_Lower_Dist'] = ((rolling_mean - (2 * rolling_std) - df['Close']) / df['Close']).astype(np.float64)
-        df['BB_Width'] = ((4 * rolling_std) / rolling_mean).astype(np.float64)
-        
-        # Momentum indicators
-        df['ROC'] = df['Close'].pct_change(periods=10)
-        df['MOM'] = df['Close'].pct_change(periods=10)
-        
-        # Drop any rows with NaN values
+        # Drop rows with NaN values from feature calculations
         df = df.dropna()
         
-        # Keep only the features we want for prediction
-        feature_columns = [
-            'Returns', 'Range', 'Volume_1d_Change',
-            'Price_MA5_Dist', 'Price_MA20_Dist', 'Price_MA50_Dist',
-            'Volatility', 'RSI', 'MACD', 'MACD_Hist',
-            'BB_Upper_Dist', 'BB_Lower_Dist', 'BB_Width',
-            'ROC', 'MOM'
-        ]
+        # Filter for normal market conditions
+        normal_market = (
+            (df['Volatility'] < df['Volatility'].quantile(0.8)) & 
+            (df['Volume'] > df['Volume'].quantile(0.2))
+        )
+        df = df[normal_market]
         
-        # Ensure all columns are float64
-        result_df = df[feature_columns].astype(np.float64)
-        
-        return result_df
+        return df
         
     except Exception as e:
         print(f"Error in create_features: {str(e)}")
         return None
 
-def prepare_sequences(df: pd.DataFrame, seq_length: int = 20) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
+def calculate_rsi(prices, window=14):
+    delta = prices.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=window).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=window).mean()
+    rs = gain / loss
+    return 100 - (100 / (1 + rs))
+
+def calculate_macd(prices):
+    exp1 = prices.ewm(span=12, adjust=False).mean()
+    exp2 = prices.ewm(span=26, adjust=False).mean()
+    return exp1 - exp2
+
+def calculate_bollinger_bands(prices, window=20, num_std=2):
+    rolling_mean = prices.rolling(window=window).mean()
+    rolling_std = prices.rolling(window=window).std()
+    upper_band = rolling_mean + (rolling_std * num_std)
+    lower_band = rolling_mean - (rolling_std * num_std)
+    return upper_band, lower_band
+
+def prepare_sequences(df: pd.DataFrame, seq_length: int = 10) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
     """
-    Creates sequences for LSTM and splits into training and testing sets.
+    Prepares sequences ensuring no future data leakage.
     """
     try:
-        # Convert DataFrame to numpy array
-        data = df.values
+        # Separate features from target and weights
+        features = df.drop(['Target', 'Sample_Weight'], axis=1).values
+        targets = df['Target'].values
+        weights = df['Sample_Weight'].values
         
-        # Create sequences
-        X, y = [], []
-        for i in range(len(data) - seq_length):
-            # Sequence of features
-            X.append(data[i:(i + seq_length)])
-            # Target is the next return
-            y.append(data[i + seq_length, 0])  # 0 is the Returns column
+        X, y, w = [], [], []
+        for i in range(len(df) - seq_length):
+            X.append(features[i:(i + seq_length)])
+            y.append(targets[i + seq_length])
+            w.append(weights[i + seq_length])
         
-        X = np.array(X)
-        y = np.array(y)
-        
-        # Split into train and test sets (80-20 split)
-        split_idx = int(len(X) * 0.8)
-        X_train = X[:split_idx]
-        X_test = X[split_idx:]
-        y_train = y[:split_idx]
-        y_test = y[split_idx:]
-        
-        return X_train, X_test, y_train, y_test
+        return np.array(X), np.array(y), np.array(w)
         
     except Exception as e:
         print(f"Error in prepare_sequences: {str(e)}")
-        return None, None, None, None
+        return None, None, None

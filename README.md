@@ -1,42 +1,126 @@
-# New York Stock Prediction Model
+# Stock Price Prediction with LSTM Neural Networks 📈
 
-![Stock Price Prediction](Prediction_graph.png)
+A sophisticated stock price prediction application using LSTM (Long Short-Term Memory) neural networks, built with TensorFlow and Streamlit.
 
-## Overview:
-The New York Stock Exchange dataset provides historical data on daily stock prices, including opening and closing prices, trading volumes, and market capitalizations. Our project aims to develop a predictive model that forecasts future stock prices based on historical data, assisting investors and financial analysts in predicting market trends.
+Try it out [here](https://LSTM-stock-prediction-model-24.streamlit.app/)
+## Features 🚀
 
-The dataset comprises 851,264 rows and 7 columns. Our model achieves an impressive accuracy rate of 96%.
+- **Advanced LSTM Architecture**
+  - Multi-scale convolution blocks
+  - Bidirectional LSTM layers
+  - Multi-head attention mechanism
+  - Residual connections
+  - Probabilistic outputs with confidence intervals
 
-### Data Acquisition:
-Acquiring and processing financial data, especially from large datasets like the New York Stock Exchange dataset, can be challenging. During the acquisition process, we encountered common issues such as data quality, format, structure, volume, and accessibility. We cleaned and processed the data to ensure reliability and suitability for analysis.
+- **Interactive UI**
+  - Real-time stock selection
+  - Adjustable prediction timeframe
+  - Customizable sequence length
+  - Detailed performance metrics
+  - Interactive visualizations
 
-For detailed column descriptions, refer to the following:
+![Actual vs Predicted](images/actual_vs_predicted.png)
 
-- **Open:** Price from the first transaction of a trading day.
-- **Close:** Price from the last transaction of a trading day.
-- **Symbol:** Symbols denoting company names of stocks.
-- **Volume:** Number of units traded in a day.
-- **High:** Maximum price in a trading day.
-- **Low:** Minimum price in a trading day.
+## Technical Details 🔧
 
-[Download Dataset](https://drive.google.com/file/d/1IVYVh0ZfZxhBCDD8rYgDihKAu_B6HtO/view?usp=share_link)
+### Model Architecture
+- Input noise injection for robustness
+- Detrending layer for stationarity
+- Multi-scale feature extraction
+- Bidirectional LSTM layers (96 -> 48 units)
+- Dual attention mechanism
+- Residual dense layers
+- Separate mean/variance outputs
 
-### Data Cleansing and Transformation:
-Data cleansing and transformation are critical steps in the data analysis process. We established data quality standards, developed a cleansing plan, and collaborated on transformation techniques to ensure consistency and accuracy in our analysis. We handled null values and outliers, ensuring robustness and reliability in our dataset.
+### Performance Metrics
+- R-squared (Prediction Accuracy)
+- RMSE (Root Mean Squared Error)
+- Sharpe Ratio (Risk-Adjusted Returns)
+- Maximum Drawdown
+- MAE (Mean Absolute Error)
+- Turnover Correlation
 
-### Exploratory Data Analysis (EDA):
-EDA is crucial for understanding data patterns and identifying trends or anomalies. Our analysis included scatter plots and pair plots to visualize data distributions, relationships between variables, and potential biases or issues.
+![Training Graph](images\training_graph.png)
 
-### Model Selection and Training:
-We selected regression models for our problem and split the dataset into training and testing sets. We evaluated model performance using appropriate metrics and techniques, optimizing hyperparameters and ensuring robust training.
+## Installation 🛠️
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/stock-prediction-lstm.git
+cd stock-prediction-lstm
+```
+
+2. Create and activate a virtual environment:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+
+3. Install the required packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+4. Run the Streamlit app:
+
+```bash
+streamlit run app.py
+```
+
+## Usage 📱
+
+1. Select a stock symbol from the dropdown menu
+2. Adjust the prediction timeframe (1-30 days)
+3. Set the sequence length (5-60 days)
+4. Click "Predict" to generate forecasts
+5. Explore various performance metrics and visualizations
+
+## Key Components 📊
+
+- `app.py`: Main Streamlit application
+- `model.py`: LSTM model architecture and training
+- `data_processing.py`: Data preprocessing and feature engineering
+- `evaluate.py`: Model evaluation and prediction functions
+
+## Performance Optimization 🎯
+
+- Gaussian likelihood loss with trading penalties
+- Cosine learning rate decay
+- Gradient clipping
+- L1/L2 regularization
+- Dropout layers
+- Batch normalization
+
+## Dependencies 📦
+
+- TensorFlow 2.x
+- Streamlit
+- Pandas
+- NumPy
+- Plotly
+- yfinance
+- scikit-learn
 
 
-![Loss Progression](Loss.png)
+![Predicted Graph](images/predicted_graph.png)
 
-### Analysis of Loss Progression:
-The provided image depicts the loss progression during model training. The blue line represents training loss, and the orange line represents validation loss. Initially, both losses decrease, but the validation loss starts to increase after a certain point, indicating potential overfitting.
+## Contributing 🤝
 
-### Conclusion:
-Our New York Stock Prediction project demonstrates the power of machine learning in forecasting stock prices. The developed model serves as a valuable tool for decision-making and market analysis, highlighting the importance of data-driven approaches in finance.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
-For more details, refer to the codebase and feel free to connect.
+## License 📄
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments 🙏
+
+- TensorFlow team for the excellent deep learning framework
+- Streamlit team for the amazing web app framework
+- The open-source community for various helpful packages
+
+## Disclaimer ⚠️
+
+This tool is for educational purposes only. Stock market predictions are inherently uncertain, and past performance does not guarantee future results. Always do your own research before making investment decisions.

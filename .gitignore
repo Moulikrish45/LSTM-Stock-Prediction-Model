@@ -1,3 +1,6 @@
 best_model.keras
 venv
 .vscode
+.qodo
+logs/
+__pycache__/
